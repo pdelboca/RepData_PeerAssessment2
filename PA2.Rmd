@@ -1,5 +1,5 @@
-Title
-=====
+Weather Event Damage Analysis
+=============================
 
 ## Synopsis
 Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
@@ -20,23 +20,23 @@ consequences?
  - Extracted and stored in the *data* folder of the repository.  
  - Load the data into R
 
-```{r}
+```{r, results='hide'}
 library(plyr)
 library(ggplot2)
+library(scales)
 library(gridExtra)
 ```
 ```{r, cache=TRUE}
-data2 <- read.csv("./data/repdata-data-StormData.csv")
-data <- data2
+data <- read.csv("./data/repdata-data-StormData.csv")
 dim(data)
 names(data)
 ```
 
-There are a total of **902297** observations of **37** variables. For this
+There are a total of `902297` observations of `37` variables. For this
 analysis I will only consider the variables related to Event Type, 
 Fatalities, Injuries and Damage.
  
-#### Cleaning Data:
+#### Data Processing:
 First I will remove the unused variables to have a more readable console output:
 ```{r}
 data <- subset(data, select=c("EVTYPE","FATALITIES","INJURIES",
@@ -44,8 +44,14 @@ data <- subset(data, select=c("EVTYPE","FATALITIES","INJURIES",
 summary(data)
 str(data)
 ```
-To answer the first question I will take a look to the columns **FATALITIES** 
-and **INJURIES**. I will aggregate **EVTYPE** by these 2 variables and plot it.
+
+In a first look we can say that there aren't `NA` but both `PROPDMGEXP` and `CROPDMGEXP`
+have trash values that will need a further clean.
+
+------------------
+
+To answer the first question I will take a look to the columns `FATALITIES` 
+and `INJURIES`. I will aggregate `EVTYPE` by these 2 variables and plot it.
 
 ```{r}
 pop.healt <- ddply(data, .(EVTYPE),summarize,
@@ -68,20 +74,19 @@ the quantiles to see if we can narrow to the top events.
 quantile(pop.healt$TOTAL)
 ```
 It seems like the 25% of the Top events has more than 44.25 casualties. Let's 
-narrow it a little bit more...
+narrow it a little bit more to have a clear big picture of the top events...
 
 ```{r}
 pop.healt <- subset(pop.healt, TOTAL > 44.25)
 dim(pop.healt)
-qplot(pop.healt$EVTYPE, pop.healt$TOTAL)
 ```
 
-Lets look at the top event
+Let's look at the top event:
 ```{r}
 pop.healt[which.max(pop.healt$TOTAL),]
 ```
 
-Now let's plot the Top 10 Events ordered by TOTAL
+Now let's plot the Top 10 Events ordered by `TOTAL`
 ```{r}
 pop.healt <- arrange(pop.healt, TOTAL, decreasing = TRUE)[1:10,]
 # Re-arrange the levels is mandatory for ggplot to plot the bars in the same
@@ -92,12 +97,12 @@ pop.healt$EVTYPE <- factor(pop.healt$EVTYPE,levels = pop.healt$EVTYPE)
 theme <- theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme_minimal()
 
 ggplot(pop.healt) + geom_bar(aes(EVTYPE,TOTAL),stat = "identity") + 
-  xlab("Event Type") + ylab("Number of people affected") +
+  xlab("Weather Events") + ylab("Number of people affected") +
   ggtitle("Numbers of people Affected in the U.S. by Weather Events from 1995 to 2011") +
   theme
 ```
 
-That looks great. But I can't sum apples and bananas (FATALITIES and INJURIES)
+That looks great. But I can't sum apples and bananas (`FATALITIES` and `INJURIES`)
 so let's look a little bit into the two variables by separated and how they impact
 in the number of people affected
 
@@ -133,13 +138,80 @@ grid.arrange(fatalities.plot, injuries.plot, ncol = 2)
 
 ```
 
-Interesting discovery! Injuries are (aprox) ten times bigger than Fatalities...
-so summing them is not valid (maybe normalize both variables and add them..??). 
+------------------
 
-Anyways, regarding the first question:  
+Now let's dig a little bit about the economic consequences. We have 4 columns:  
+ - `PROPDMG`  
+ - `PROPDMGEXP`  
+ - `CROPDMG`  
+ - `CROPDMGEXP`
+ 
+Let's try to unify the columns in just 1 numeric Value: `TOTALDMG`. Both 
+`PROPDMGEXP` and `CROPDMGEXP` columns have a multiplier for each value in `PROPDMG` and
+`CROPDMG`. We have Hundred (H), Thousand (K), Million (M) and Billion (B). We also
+have trash values like -, +, ?
+
+```{r}
+data$PROPDMGEXP <- tolower(as.character(data$PROPDMGEXP))
+data$CROPDMGEXP <- tolower(as.character(data$CROPDMGEXP))
+
+data[data$CROPDMGEXP == "b", "CROPDMGEXP"] <- 9
+data[data$CROPDMGEXP == "m", "CROPDMGEXP"] <- 6
+data[data$CROPDMGEXP == "k", "CROPDMGEXP"] <- 3
+data[data$CROPDMGEXP == "", "CROPDMGEXP"] <- 0
+data[data$CROPDMGEXP == "?", "CROPDMGEXP"] <- 0
+data$CROPDMGEXP <- as.numeric(data$CROPDMGEXP)
+table(data$CROPDMGEXP)
+
+data[data$PROPDMGEXP == "b", "PROPDMGEXP"] <- 9
+data[data$PROPDMGEXP == "m", "PROPDMGEXP"] <- 6
+data[data$PROPDMGEXP == "k", "PROPDMGEXP"] <- 3
+data[data$PROPDMGEXP == "h", "PROPDMGEXP"] <- 2
+data[data$PROPDMGEXP == "", "PROPDMGEXP"] <- 0
+data[data$PROPDMGEXP == "?", "PROPDMGEXP"] <- 0
+data[data$PROPDMGEXP == "-", "PROPDMGEXP"] <- 0
+data[data$PROPDMGEXP == "+", "PROPDMGEXP"] <- 0
+data$PROPDMGEXP <- as.numeric(data$PROPDMGEXP)
+table(data$PROPDMGEXP)
+```
+
+Excellent! Now we have to calculate the `TOTALDMG`:  
+
+```{r}
+crop.total.dmg <- data$CROPDMG * (10 ^ data$CROPDMGEXP)
+prop.total.dmg <- data$PROPDMG * (10 ^ data$PROPDMGEXP)
+
+total.dmg <- crop.total.dmg + prop.total.dmg
+
+data$TOTALDMG <- total.dmg
+```
+
+Now we just need to summarize the data and create a nice plot.
+
+```{r}
+event.dmg <- ddply(data, .(EVTYPE), summarize,
+                   TOTALDMG = sum(TOTALDMG))
+event.dmg <- arrange(event.dmg, TOTALDMG, decreasing = TRUE)[1:10,]
+
+event.dmg$EVTYPE <- factor(event.dmg$EVTYPE, levels = event.dmg$EVTYPE)
+
+ggplot(event.dmg) + geom_bar(aes(EVTYPE,TOTALDMG), stat="identity") +
+  xlab("Weather Events") + 
+  scale_y_continuous("Total Damage in Dollars",labels = comma) + 
+  ggtitle("Total Damage in Dollars in the U.S,\n by Weather Events from 1995 to 2011") + 
+  theme
+
+```
+
+## Results
 
 #### Across the United States, which types of events are most harmful with respect to population health?  
-It's safe to say that **Tornados** are the most harmful events.
+It's safe to say that `TORNADOS` are the most harmful events, followed by 
+`EXCESIVE HEAT`. 
+
+#### Across the United States, which types of events have the greatest economic consequences? 
+It's safe to say that `FLOODS` are the most harmful events, followed by 
+`HURRICANE/TYPHOON`  
 
 
 
