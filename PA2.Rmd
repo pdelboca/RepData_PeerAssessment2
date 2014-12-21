@@ -17,16 +17,27 @@ consequences?
  - [Download Link](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2)  
  - [Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
  - **Date:** Dec 20th, 2014  
- - Extracted and stored in the *data* folder of the repository.  
- - Load the data into R
 
-```{r, results='hide'}
+Needed libraries
+```{r}
 library(plyr)
 library(ggplot2)
 library(scales)
 library(gridExtra)
 ```
-```{r, cache=TRUE}
+
+Download and Extract the file:
+```{r}
+setwd("~/Repos/RepData_PeerAssessment2/")
+
+if (!"repdata-data-StormData.csv.bz2" %in% dir("./data/")) {
+  download.file("http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2",
+                destfile = "data/repdata-data-StormData.csv.bz2")
+  bunzip2("./data/repdata-data-StormData.csv.bz2", overwrite=TRUE, remove=FALSE)
+}else{
+  print("File already Downloaded and extracted.")
+}
+
 data <- read.csv("./data/repdata-data-StormData.csv")
 dim(data)
 names(data)
